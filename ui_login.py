@@ -118,7 +118,7 @@ class PantallaLogin(ctk.CTk):
             self.destroy()
             
             # Importamos aquí para evitar dependencias circulares al cargar la app
-            from ui_main import PantallaPrincipal
+            from main import PantallaPrincipal
             
             # Abrimos el Dashboard Principal pasando el rol y nombre
             app_main = PantallaPrincipal(rol_usuario=rol_asignado, nombre_usuario=nombre_completo)
