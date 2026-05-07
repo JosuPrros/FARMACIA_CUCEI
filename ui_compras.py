@@ -1,6 +1,7 @@
 import customtkinter as ctk
 from tkinter import ttk, messagebox
 import db_manager
+import facturacion
 
 # --- COLORES ---
 COLOR_FONDO = "#F4F6F9"
@@ -36,41 +37,26 @@ class PantallaCompras(ctk.CTkFrame):
         )
         self.etiqueta_titulo.grid(row=0, column=0, columnspan=3, pady=(20, 15), padx=25, sticky="w")
         
-        # Botón Registrar Proveedor
-        self.boton_registrar_proveedor = ctk.CTkButton(
-            self.marco_formulario, text="📝 Registrar Proveedor", height=35,
-            fg_color=COLOR_PRIMARIO, hover_color=COLOR_SECUNDARIO, font=("Helvetica", 12, "bold"),
-            corner_radius=8, command=self.evento_registrar_proveedor
-        )
-        self.boton_registrar_proveedor.grid(row=0, column=3, columnspan=2, padx=(10, 25), pady=(20, 15), sticky="e")
-        
-        # P1: Proveedor
-        self.entrada_proveedor = ctk.CTkEntry(
-            self.marco_formulario, placeholder_text="ID Proveedor (Ej. 1)", 
-            height=45, width=200, corner_radius=10, border_color=COLOR_SECUNDARIO
-        )
-        self.entrada_proveedor.grid(row=1, column=0, padx=(25, 10), pady=(0, 20), sticky="w")
-        
         # P2: Medicamento
         self.entrada_medicamento = ctk.CTkEntry(
-            self.marco_formulario, placeholder_text="ID Producto (Ej. P01)", 
+            self.marco_formulario, placeholder_text="ID Producto o Nombre", 
             height=45, width=230, corner_radius=10, border_color=COLOR_SECUNDARIO
         )
-        self.entrada_medicamento.grid(row=1, column=1, padx=10, pady=(0, 20), sticky="w")
+        self.entrada_medicamento.grid(row=1, column=0, padx=25, pady=(0, 20), sticky="w")
         
         # P3: Cantidad de piezas a ingresar
         self.entrada_piezas = ctk.CTkEntry(
             self.marco_formulario, placeholder_text="Cantidad...", 
             height=45, width=150, corner_radius=10, border_color=COLOR_SECUNDARIO
         )
-        self.entrada_piezas.grid(row=1, column=2, padx=10, pady=(0, 20), sticky="w")
+        self.entrada_piezas.grid(row=1, column=1, padx=10, pady=(0, 20), sticky="w")
 
         # P4: Costo Total Factura (Para estadísticas de Gerente)
         self.entrada_costo = ctk.CTkEntry(
             self.marco_formulario, placeholder_text="Costo Factura ($)", 
             height=45, width=150, corner_radius=10, border_color=COLOR_SECUNDARIO
         )
-        self.entrada_costo.grid(row=1, column=3, padx=10, pady=(0, 20), sticky="w")
+        self.entrada_costo.grid(row=1, column=2, padx=10, pady=(0, 20), sticky="w")
         
         # Botón para añadir registro "temporal" a la lista de captura antes de oficializar
         self.boton_agregar_lista = ctk.CTkButton(
@@ -78,7 +64,7 @@ class PantallaCompras(ctk.CTkFrame):
             fg_color=COLOR_SECUNDARIO, hover_color=COLOR_PRIMARIO, font=("Helvetica", 13, "bold"),
             corner_radius=10, command=self.evento_agregar_linea
         )
-        self.boton_agregar_lista.grid(row=1, column=4, padx=(10, 25), pady=(0, 20), sticky="e")
+        self.boton_agregar_lista.grid(row=1, column=3, padx=(10, 25), pady=(0, 20), sticky="e")
         
     def crear_orden_cargada(self):
         """Bloque Blanco Inferior donde se va mostrando toda la línea de captura del remonte entrante y botón Confirmar Gral."""
@@ -115,52 +101,84 @@ class PantallaCompras(ctk.CTkFrame):
         self.boton_confirmar_stock.pack(side="bottom", pady=25, padx=25, fill="x")
 
     def evento_agregar_linea(self):
-        proveedor = self.entrada_proveedor.get()
         med = self.entrada_medicamento.get()
         piezas = self.entrada_piezas.get()
         costo = self.entrada_costo.get()
         
-        if not proveedor or not med or not piezas or not costo:
+        if not med or not piezas or not costo:
             messagebox.showwarning("Incompleto", "Llena todos los campos para agregar a la lista.")
             return
             
-        self.tabla_ingresos.insert("", "end", values=(proveedor, med, piezas, f"${costo}"))
+        info_prod = db_manager.obtener_proveedor_de_producto(med)
+        if not info_prod or info_prod[2] is None:
+            messagebox.showwarning("Error", "No se encontró el producto o no tiene un proveedor asignado.")
+            return
+            
+        id_prod, nombre_med, id_prov = info_prod
+            
+        self.tabla_ingresos.insert("", "end", values=(id_prov, f"[{id_prod}] {nombre_med}", piezas, f"${costo}"))
         
         # Limpiar los de producto
         self.entrada_medicamento.delete(0, "end")
         self.entrada_piezas.delete(0, "end")
         
-    def evento_registrar_proveedor(self):
-        # Importar y mostrar la nueva ventana popup para registro
-        from ui_registro_proveedor import PantallaRegistroProveedor
-        ventana_registro = PantallaRegistroProveedor(master=self.winfo_toplevel())
-        
     def evento_confirmar_stock_global(self):
-        items = []
+        from collections import defaultdict
+        
+        pedidos_por_proveedor = defaultdict(list)
+        
         for child in self.tabla_ingresos.get_children():
             val = self.tabla_ingresos.item(child)["values"]
-            # val = [id_proveedor, id_producto, cantidad, costo_string]
-            costo_num = float(str(val[3]).replace("$", ""))
-            items.append((str(val[1]), "Producto Recibido", int(val[2]), costo_num))
+            id_prov = int(val[0])
+            desc_completa = str(val[1])
+            if "]" in desc_completa:
+                id_prod = desc_completa.split("]")[0].replace("[", "")
+                nombre_med = desc_completa.split("] ")[1] if "] " in desc_completa else "Producto"
+            else:
+                id_prod = desc_completa
+                nombre_med = "Producto"
+                
+            cant = int(val[2])
+            subtot = float(str(val[3]).replace("$", ""))
             
-        if not items:
+            pedidos_por_proveedor[id_prov].append((id_prod, nombre_med, cant, subtot))
+            
+        if not pedidos_por_proveedor:
             messagebox.showinfo("Vacío", "No hay elementos para procesar.")
             return
             
-        # Tomar proveedor del primer elemento y costo total sumado o del input
-        id_prov = int(self.tabla_ingresos.item(self.tabla_ingresos.get_children()[0])["values"][0])
-        costo_total = float(self.entrada_costo.get()) if self.entrada_costo.get() else sum([i[3] for i in items])
-        id_usuario = 1 # Para simplificar la demostración, usamos el ID 1 por defecto
+        id_usuario = 1 
+        errores = []
+        mensajes_exito = []
         
-        exito, msg = db_manager.registrar_compra(id_prov, id_usuario, costo_total, items)
-        if exito:
-            messagebox.showinfo("Éxito", msg)
+        for id_prov, items_prov in pedidos_por_proveedor.items():
+            costo_total_prov = sum([i[3] for i in items_prov])
+            exito, msg = db_manager.registrar_compra(id_prov, id_usuario, costo_total_prov, items_prov)
+            
+            if exito:
+                # ENVIAR CORREO AL PROVEEDOR
+                nombre_prov, correo_prov = db_manager.obtener_datos_proveedor(id_prov)
+                datos_pedido = {
+                    "nombre_proveedor": nombre_prov,
+                    "total": costo_total_prov,
+                    "items": items_prov
+                }
+                
+                envio_ok, envio_msg = facturacion.generar_y_enviar_pedido_proveedor(datos_pedido, correo_prov)
+                
+                texto_correo = f"Correo enviado a {correo_prov}." if envio_ok else f"Aviso correo: {envio_msg}"
+                mensajes_exito.append(f"Prov. {id_prov}: OK. {texto_correo}")
+            else:
+                errores.append(f"Prov. {id_prov} Error: {msg}")
+                
+        if errores:
+            messagebox.showerror("Resultados con Errores", "\n".join(errores))
+            
+        if mensajes_exito:
+            messagebox.showinfo("Resultados Exitosos", "\n".join(mensajes_exito))
             for item in self.tabla_ingresos.get_children():
                 self.tabla_ingresos.delete(item)
-            self.entrada_proveedor.delete(0, "end")
             self.entrada_costo.delete(0, "end")
-        else:
-            messagebox.showerror("Error", msg)
 
 # --- Ejecución Independiente ---
 if __name__ == "__main__":

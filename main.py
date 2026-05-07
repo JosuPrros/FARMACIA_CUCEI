@@ -6,6 +6,7 @@ from ui_clientes import PantallaClientes
 from ui_productos import PantallaProductos
 from ui_ventas import PantallaVentas
 from ui_compras import PantallaCompras
+from ui_proveedores import PantallaProveedores
 
 # --- COLORES (Idénticos al estilo institucional) ---
 COLOR_FONDO = "#F4F6F9"
@@ -36,6 +37,7 @@ class PantallaPrincipal(ctk.CTk):
         self.grid_rowconfigure(0, weight=1)    # Toma todo el alto
         
         self.frame_actual = None
+        self.turno_iniciado = None
         
         self.dibujar_sidebar()
         self.dibujar_area_central()
@@ -64,6 +66,7 @@ class PantallaPrincipal(ctk.CTk):
             self.boton_compras = self.crear_boton_menu("Compras", self.abrir_compras)
             
         if self.rol_usuario == "Admin":
+            self.boton_proveedores = self.crear_boton_menu("Proveedores", self.abrir_proveedores)
             self.boton_usuarios = self.crear_boton_menu("Usuarios", self.abrir_usuarios)
         
         # Información del empleado inyectada al fondo
@@ -73,6 +76,14 @@ class PantallaPrincipal(ctk.CTk):
             font=("Helvetica", 12), text_color="#A9CCEA"
         )
         self.etiqueta_empleado.pack(side="bottom", pady=20)
+        
+        # Botón de Turno
+        self.boton_turno = ctk.CTkButton(
+            self.sidebar, text="Iniciar Turno", height=45, width=200,
+            font=("Helvetica", 14, "bold"), fg_color="#28A745", hover_color="#218838",
+            corner_radius=10, command=self.toggle_turno
+        )
+        self.boton_turno.pack(side="bottom", pady=(0, 20), padx=25)
         
     def crear_boton_menu(self, texto, comando):
         # Función auxiliar para estandarizar los botones del menú lateral
@@ -129,6 +140,44 @@ class PantallaPrincipal(ctk.CTk):
         self.limpiar_area_central()
         self.frame_actual = PantallaUsuarios(self.area_central)
         self.frame_actual.pack(fill="both", expand=True)
+
+    def abrir_proveedores(self):
+        self.limpiar_area_central()
+        self.frame_actual = PantallaProveedores(self.area_central)
+        self.frame_actual.pack(fill="both", expand=True)
+
+    def toggle_turno(self):
+        from datetime import datetime
+        import facturacion
+        import db_manager
+        from tkinter import messagebox
+        
+        if self.turno_iniciado is None:
+            self.turno_iniciado = datetime.now()
+            self.boton_turno.configure(text="Terminar Turno", fg_color="#d9534f", hover_color="#c9302c")
+            messagebox.showinfo("Turno Iniciado", f"Turno iniciado a las {self.turno_iniciado.strftime('%H:%M:%S')}")
+        else:
+            fecha_fin = datetime.now()
+            ventas = db_manager.obtener_ventas_periodo(self.turno_iniciado, fecha_fin)
+            compras = db_manager.obtener_compras_periodo(self.turno_iniciado, fecha_fin)
+            top_prod = db_manager.obtener_producto_mas_vendido(self.turno_iniciado, fecha_fin)
+            
+            datos_turno = {
+                "inicio": self.turno_iniciado,
+                "fin": fecha_fin,
+                "ventas": ventas,
+                "compras": compras,
+                "top_prod": top_prod
+            }
+            
+            exito, msg = facturacion.generar_reporte_turno(datos_turno)
+            if exito:
+                messagebox.showinfo("Turno Terminado", f"Turno finalizado.\nReporte generado exitosamente:\n{msg}")
+            else:
+                messagebox.showerror("Error", f"Fallo al generar reporte:\n{msg}")
+                
+            self.turno_iniciado = None
+            self.boton_turno.configure(text="Iniciar Turno", fg_color="#28A745", hover_color="#218838")
 
 if __name__ == "__main__":
     # Redirigir al inicio de sesión si se ejecuta este archivo directamente

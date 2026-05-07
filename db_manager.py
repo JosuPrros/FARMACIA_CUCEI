@@ -2,8 +2,57 @@ import mysql.connector
 from mysql.connector import Error
 import hashlib
 
+_db_initialized = False
+
+def inicializar_esquema(conn):
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SHOW COLUMNS FROM Productos LIKE 'id_proveedor'")
+        if not cursor.fetchone():
+            cursor.execute("ALTER TABLE Productos ADD COLUMN id_proveedor INT DEFAULT NULL")
+            try:
+                cursor.execute("ALTER TABLE Productos ADD CONSTRAINT fk_prod_prov FOREIGN KEY (id_proveedor) REFERENCES Proveedores(id_proveedor) ON DELETE SET NULL ON UPDATE CASCADE")
+            except:
+                pass
+            conn.commit()
+            
+        cursor.execute("SHOW COLUMNS FROM Compras LIKE 'id_proveedor'")
+        col = cursor.fetchone()
+        if col and col[2] == 'NO': # NO indicates NOT NULL
+            try:
+                cursor.execute("ALTER TABLE Compras DROP FOREIGN KEY compras_ibfk_1")
+                cursor.execute("ALTER TABLE Compras MODIFY id_proveedor INT DEFAULT NULL")
+                cursor.execute("ALTER TABLE Compras ADD CONSTRAINT compras_ibfk_1 FOREIGN KEY (id_proveedor) REFERENCES Proveedores(id_proveedor) ON DELETE SET NULL ON UPDATE CASCADE")
+                conn.commit()
+            except Exception as e:
+                pass
+                
+        cursor.execute("SHOW COLUMNS FROM Detalle_Ventas LIKE 'id_producto'")
+        col_dv = cursor.fetchone()
+        if col_dv and col_dv[2] == 'NO':
+            try:
+                cursor.execute("ALTER TABLE Detalle_Ventas DROP FOREIGN KEY detalle_ventas_ibfk_2")
+                cursor.execute("ALTER TABLE Detalle_Ventas MODIFY id_producto INT DEFAULT NULL")
+                cursor.execute("ALTER TABLE Detalle_Ventas ADD CONSTRAINT detalle_ventas_ibfk_2 FOREIGN KEY (id_producto) REFERENCES Productos(id_producto) ON DELETE SET NULL ON UPDATE CASCADE")
+                conn.commit()
+            except Exception: pass
+            
+        cursor.execute("SHOW COLUMNS FROM Detalle_Compras LIKE 'id_producto'")
+        col_dc = cursor.fetchone()
+        if col_dc and col_dc[2] == 'NO':
+            try:
+                cursor.execute("ALTER TABLE Detalle_Compras DROP FOREIGN KEY detalle_compras_ibfk_2")
+                cursor.execute("ALTER TABLE Detalle_Compras MODIFY id_producto INT DEFAULT NULL")
+                cursor.execute("ALTER TABLE Detalle_Compras ADD CONSTRAINT detalle_compras_ibfk_2 FOREIGN KEY (id_producto) REFERENCES Productos(id_producto) ON DELETE SET NULL ON UPDATE CASCADE")
+                conn.commit()
+            except Exception: pass
+            
+    except Exception as e:
+        print(f"[ADVERTENCIA] Error inicializando esquema: {e}")
+
 def get_connection():
     """Establece conexión a la base de datos MySQL en XAMPP."""
+    global _db_initialized
     try:
         conn = mysql.connector.connect(
             host='localhost',
@@ -12,6 +61,9 @@ def get_connection():
             database='farmacia_cucei'
         )
         if conn.is_connected():
+            if not _db_initialized:
+                inicializar_esquema(conn)
+                _db_initialized = True
             return conn
     except Error as e:
         print(f"[ERROR] No se pudo conectar a MySQL: {e}")
@@ -130,6 +182,88 @@ def crear_proveedor(empresa, contacto, correo, telefono):
     finally:
         if conn: conn.close()
 
+def obtener_proveedores():
+    conn = get_connection()
+    if not conn: return []
+    cursor = conn.cursor()
+    cursor.execute("SELECT id_proveedor, nombre_empresa FROM Proveedores")
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+def obtener_proveedores_completo():
+    conn = get_connection()
+    if not conn: return []
+    cursor = conn.cursor()
+    cursor.execute("SELECT id_proveedor, nombre_empresa, nombre_contacto, correo, telefono FROM Proveedores")
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+def obtener_datos_proveedor(id_proveedor):
+    conn = get_connection()
+    if not conn: return None, None
+    cursor = conn.cursor()
+    cursor.execute("SELECT nombre_empresa, correo FROM Proveedores WHERE id_proveedor = %s", (id_proveedor,))
+    row = cursor.fetchone()
+    conn.close()
+    return (row[0], row[1]) if row else (None, None)
+
+def obtener_productos_por_proveedor(id_proveedor):
+    conn = get_connection()
+    if not conn: return []
+    cursor = conn.cursor()
+    cursor.execute("SELECT nombre_comercial FROM Productos WHERE id_proveedor = %s", (id_proveedor,))
+    rows = cursor.fetchall()
+    conn.close()
+    return [r[0] for r in rows]
+
+def actualizar_proveedor(id_proveedor, empresa, contacto, correo, telefono):
+    conn = get_connection()
+    if not conn: return False, "Sin conexión a BD"
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            UPDATE Proveedores 
+            SET nombre_empresa = %s, nombre_contacto = %s, correo = %s, telefono = %s 
+            WHERE id_proveedor = %s
+        """, (empresa, contacto, correo, telefono, id_proveedor))
+        conn.commit()
+        return True, "Proveedor actualizado correctamente"
+    except Error as e:
+        return False, f"Error: {e}"
+    finally:
+        if conn: conn.close()
+
+def eliminar_proveedor_seguro(id_proveedor):
+    conn = get_connection()
+    if not conn: return False, "Sin conexión a BD", False
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM Proveedores WHERE id_proveedor = %s", (id_proveedor,))
+        conn.commit()
+        return True, "Proveedor eliminado exitosamente", False
+    except Error as e:
+        if "foreign key constraint" in str(e).lower():
+            return False, "Tiene historial. Requiere fuerza.", True
+        return False, f"Error: {e}", False
+    finally:
+        if conn: conn.close()
+
+def eliminar_proveedor_forzado(id_proveedor):
+    conn = get_connection()
+    if not conn: return False, "Sin conexión a BD"
+    cursor = conn.cursor()
+    try:
+        # Con ON DELETE SET NULL se actualizarán las tablas hijas automáticamente.
+        cursor.execute("DELETE FROM Proveedores WHERE id_proveedor = %s", (id_proveedor,))
+        conn.commit()
+        return True, "Proveedor eliminado forzosamente"
+    except Error as e:
+        return False, f"Error: {e}"
+    finally:
+        if conn: conn.close()
+
 # --- PRODUCTOS / INVENTARIO ---
 def obtener_productos():
     conn = get_connection()
@@ -157,6 +291,21 @@ def buscar_producto(termino):
     conn.close()
     return rows
 
+def obtener_proveedor_de_producto(termino):
+    conn = get_connection()
+    if not conn: return None
+    cursor = conn.cursor()
+    query = f"%{termino}%"
+    cursor.execute("""
+        SELECT p.id_producto, p.nombre_comercial, p.id_proveedor
+        FROM Productos p
+        WHERE p.id_producto LIKE %s OR p.nombre_comercial LIKE %s
+        LIMIT 1
+    """, (query, query))
+    row = cursor.fetchone()
+    conn.close()
+    return row
+
 def obtener_clasificaciones():
     conn = get_connection()
     if not conn: return []
@@ -176,13 +325,13 @@ def obtener_clasificaciones():
     conn.close()
     return rows
 
-def registrar_producto_completo(nombre_comercial, id_clasificacion, precio, stock_fisico):
+def registrar_producto_completo(nombre_comercial, id_clasificacion, id_proveedor, precio, stock_fisico):
     conn = get_connection()
     if not conn: return False, "Sin conexión a Base de Datos"
     cursor = conn.cursor()
     try:
-        cursor.execute("INSERT INTO Productos (nombre_comercial, id_clasificacion, precio_publico, stock_fisico) VALUES (%s, %s, %s, %s)",
-                       (nombre_comercial.strip(), id_clasificacion, precio, stock_fisico))
+        cursor.execute("INSERT INTO Productos (nombre_comercial, id_clasificacion, id_proveedor, precio_publico, stock_fisico) VALUES (%s, %s, %s, %s, %s)",
+                       (nombre_comercial.strip(), id_clasificacion, id_proveedor, precio, stock_fisico))
         conn.commit()
         return True, "Producto registrado correctamente en la base de datos."
     except Error as e:
@@ -192,7 +341,53 @@ def registrar_producto_completo(nombre_comercial, id_clasificacion, precio, stoc
 
 def registrar_producto_basico(nombre_comercial, precio):
     # Por retrocompatibilidad con scripts de prueba
-    return registrar_producto_completo(nombre_comercial, 1, precio, 0)
+    return registrar_producto_completo(nombre_comercial, 1, None, precio, 0)
+
+def eliminar_producto_seguro(id_producto):
+    conn = get_connection()
+    if not conn: return False, "Sin conexión a Base de Datos", False
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM Productos WHERE id_producto = %s", (id_producto,))
+        conn.commit()
+        return True, "Producto eliminado exitosamente", False
+    except Error as e:
+        if "foreign key constraint" in str(e).lower():
+            return False, "No se puede eliminar el producto porque tiene compras o ventas asociadas.", True
+        return False, f"Error en BD: {str(e)}", False
+    finally:
+        if conn: conn.close()
+
+def eliminar_producto_forzado(id_producto):
+    conn = get_connection()
+    if not conn: return False, "Sin conexión a BD"
+    cursor = conn.cursor()
+    try:
+        # Con ON DELETE SET NULL se actualizarán las tablas hijas automáticamente.
+        cursor.execute("DELETE FROM Productos WHERE id_producto = %s", (id_producto,))
+        conn.commit()
+        return True, "Producto eliminado forzosamente"
+    except Error as e:
+        return False, f"Error: {e}"
+    finally:
+        if conn: conn.close()
+
+def actualizar_producto(id_producto, nombre_comercial, precio_publico, id_proveedor):
+    conn = get_connection()
+    if not conn: return False, "Sin conexión a Base de Datos"
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            UPDATE Productos 
+            SET nombre_comercial = %s, precio_publico = %s, id_proveedor = %s 
+            WHERE id_producto = %s
+        """, (nombre_comercial.strip(), precio_publico, id_proveedor, id_producto))
+        conn.commit()
+        return True, "Producto actualizado correctamente."
+    except Error as e:
+        return False, f"Error en BD: {str(e)}"
+    finally:
+        if conn: conn.close()
 
 # --- COMPRAS (Abastecimiento) ---
 def registrar_compra(id_proveedor, id_usuario, costo_total, items):
@@ -243,7 +438,7 @@ def registrar_venta(id_usuario, telefono_cliente, total, descuento_usado, puntos
                            
         if telefono_cliente:
             if descuento_usado:
-                cursor.execute("UPDATE Clientes SET puntos_acumulados = puntos_acumulados - 50 + %s WHERE telefono = %s", (puntos_generados, telefono_cliente))
+                cursor.execute("UPDATE Clientes SET puntos_acumulados = 0 WHERE telefono = %s", (telefono_cliente,))
             else:
                 cursor.execute("UPDATE Clientes SET puntos_acumulados = puntos_acumulados + %s WHERE telefono = %s", (puntos_generados, telefono_cliente))
         
@@ -254,6 +449,43 @@ def registrar_venta(id_usuario, telefono_cliente, total, descuento_usado, puntos
         return False, f"Error en venta: {str(e)}"
     finally:
         if conn: conn.close()
+
+# --- TURNOS / REPORTES ---
+def obtener_ventas_periodo(inicio, fin):
+    conn = get_connection()
+    if not conn: return 0.0
+    cursor = conn.cursor()
+    cursor.execute("SELECT SUM(total_venta) FROM Ventas WHERE fecha_venta BETWEEN %s AND %s", (inicio, fin))
+    row = cursor.fetchone()
+    conn.close()
+    return float(row[0]) if row and row[0] else 0.0
+
+def obtener_compras_periodo(inicio, fin):
+    conn = get_connection()
+    if not conn: return 0.0
+    cursor = conn.cursor()
+    cursor.execute("SELECT SUM(costo_total_factura) FROM Compras WHERE fecha_compra BETWEEN %s AND %s", (inicio, fin))
+    row = cursor.fetchone()
+    conn.close()
+    return float(row[0]) if row and row[0] else 0.0
+
+def obtener_producto_mas_vendido(inicio, fin):
+    conn = get_connection()
+    if not conn: return "N/A"
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT p.nombre_comercial, SUM(dv.cantidad) as total_vendido
+        FROM Detalle_Ventas dv
+        JOIN Ventas v ON dv.id_venta = v.id_venta
+        JOIN Productos p ON dv.id_producto = p.id_producto
+        WHERE v.fecha_venta BETWEEN %s AND %s
+        GROUP BY dv.id_producto
+        ORDER BY total_vendido DESC
+        LIMIT 1
+    """, (inicio, fin))
+    row = cursor.fetchone()
+    conn.close()
+    return f"{row[0]} ({int(row[1])} pz)" if row else "Ninguno"
 
 
 # === MENÚ INTERACTIVO DE PRUEBAS ===

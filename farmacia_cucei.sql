@@ -140,6 +140,7 @@ CREATE TABLE `productos` (
   `id_producto` int(11) NOT NULL,
   `nombre_comercial` varchar(150) NOT NULL,
   `id_clasificacion` int(11) NOT NULL,
+  `id_proveedor` int(11) DEFAULT NULL,
   `precio_publico` decimal(10,2) NOT NULL,
   `stock_fisico` int(11) DEFAULT 0,
   `fecha_agregado` datetime DEFAULT current_timestamp()
@@ -149,8 +150,8 @@ CREATE TABLE `productos` (
 -- Volcado de datos para la tabla `productos`
 --
 
-INSERT INTO `productos` (`id_producto`, `nombre_comercial`, `id_clasificacion`, `precio_publico`, `stock_fisico`, `fecha_agregado`) VALUES
-(3, 'Amper', 1, 20.00, 0, '2026-04-27 19:17:20');
+INSERT INTO `productos` (`id_producto`, `nombre_comercial`, `id_clasificacion`, `id_proveedor`, `precio_publico`, `stock_fisico`, `fecha_agregado`) VALUES
+(3, 'Amper', 1, 1, 20.00, 0, '2026-04-27 19:17:20');
 
 -- --------------------------------------------------------
 
@@ -289,7 +290,8 @@ ALTER TABLE `detalle_ventas`
 --
 ALTER TABLE `productos`
   ADD PRIMARY KEY (`id_producto`),
-  ADD KEY `id_clasificacion` (`id_clasificacion`);
+  ADD KEY `id_clasificacion` (`id_clasificacion`),
+  ADD KEY `id_proveedor` (`id_proveedor`);
 
 --
 -- Indices de la tabla `proveedores`
@@ -407,7 +409,8 @@ ALTER TABLE `detalle_ventas`
 -- Filtros para la tabla `productos`
 --
 ALTER TABLE `productos`
-  ADD CONSTRAINT `productos_ibfk_1` FOREIGN KEY (`id_clasificacion`) REFERENCES `clasificaciones` (`id_clasificacion`) ON UPDATE CASCADE;
+  ADD CONSTRAINT `productos_ibfk_1` FOREIGN KEY (`id_clasificacion`) REFERENCES `clasificaciones` (`id_clasificacion`) ON UPDATE CASCADE,
+  ADD CONSTRAINT `fk_prod_prov` FOREIGN KEY (`id_proveedor`) REFERENCES `proveedores` (`id_proveedor`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 --
 -- Filtros para la tabla `usuarios`

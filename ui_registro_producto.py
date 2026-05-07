@@ -58,6 +58,13 @@ class VentanaNuevoProducto(ctk.CTkToplevel):
         self.combo_clasificacion.pack(pady=(0, 15), padx=30, fill="x")
         self.combo_clasificacion.set(self.nombres_clasificaciones[0])
         
+        # 2.5. Proveedor
+        self.entrada_proveedor = ctk.CTkEntry(
+            self.marco_form, placeholder_text="ID Proveedor", 
+            height=45, corner_radius=10, border_color=COLOR_SECUNDARIO
+        )
+        self.entrada_proveedor.pack(pady=(0, 15), padx=30, fill="x")
+        
         # 3. Precio al Público
         self.entrada_precio = ctk.CTkEntry(
             self.marco_form, placeholder_text="Precio al Público (Ej. 150.50)", 
@@ -83,23 +90,31 @@ class VentanaNuevoProducto(ctk.CTkToplevel):
     def guardar_producto(self):
         nombre = self.entrada_nombre.get()
         clasificacion_nombre = self.combo_clasificacion.get()
+        proveedor_str = self.entrada_proveedor.get()
         precio_str = self.entrada_precio.get()
         stock_str = self.entrada_stock.get()
         
-        if not nombre or not precio_str or clasificacion_nombre == "":
-            messagebox.showwarning("Campos incompletos", "Por favor llena los campos Nombre y Precio.")
+        if not nombre or not precio_str or not proveedor_str or clasificacion_nombre == "":
+            messagebox.showwarning("Campos incompletos", "Por favor llena los campos Nombre, Precio y ID Proveedor.")
             return
             
         try:
             precio = float(precio_str)
+            id_proveedor = int(proveedor_str)
             stock = int(stock_str) if stock_str else 0
         except ValueError:
-            messagebox.showerror("Error", "El precio debe ser numérico y el stock debe ser un número entero.")
+            messagebox.showerror("Error", "El precio y el ID Proveedor deben ser numéricos.")
+            return
+            
+        # Verificar que el ID Proveedor exista
+        nombre_prov, _ = db_manager.obtener_datos_proveedor(id_proveedor)
+        if nombre_prov is None:
+            messagebox.showerror("Error", f"El proveedor con ID {id_proveedor} no existe en la base de datos.")
             return
             
         id_clasificacion = self.mapa_clasificaciones.get(clasificacion_nombre, 1)
         
-        exito, msg = db_manager.registrar_producto_completo(nombre, id_clasificacion, precio, stock)
+        exito, msg = db_manager.registrar_producto_completo(nombre, id_clasificacion, id_proveedor, precio, stock)
         if exito:
             messagebox.showinfo("Éxito", msg)
             self.destroy()

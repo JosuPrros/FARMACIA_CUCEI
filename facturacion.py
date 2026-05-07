@@ -114,9 +114,13 @@ def generar_y_enviar_factura(datos_venta, correo_cliente):
     except ImportError:
         return False, "Falta la librería reportlab (pip install reportlab)"
         
-    # 1. Generar PDF Temporal
+    # 1. Generar PDF y guardar en su carpeta
+    if not os.path.exists("Facturas"):
+        os.makedirs("Facturas")
+        
     fecha_str = datetime.now().strftime('%Y%m%d%H%M%S')
-    ruta_pdf = f"Factura_{fecha_str}.pdf"
+    nombre_pdf = f"Factura_CUCEI_{fecha_str}.pdf"
+    ruta_pdf = os.path.join("Facturas", nombre_pdf)
     
     exito_pdf = generar_pdf_factura(datos_venta, ruta_pdf)
     if not exito_pdf:
@@ -146,7 +150,7 @@ def generar_y_enviar_factura(datos_venta, correo_cliente):
     try:
         with open(ruta_pdf, 'rb') as f:
             pdf_data = f.read()
-        msg.add_attachment(pdf_data, maintype='application', subtype='pdf', filename=f"Factura_CUCEI_{fecha_str}.pdf")
+        msg.add_attachment(pdf_data, maintype='application', subtype='pdf', filename=nombre_pdf)
         
         # Conexión SMTP a Gmail
         with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
@@ -159,11 +163,291 @@ def generar_y_enviar_factura(datos_venta, correo_cliente):
         print(f"[ERROR] Fallo al enviar el correo: {e}")
         return False, f"Fallo al enviar correo: {e}"
     finally:
-        # 3. Limpiar PDF temporal
-        if os.path.exists(ruta_pdf):
-            os.remove(ruta_pdf)
+        # 3. Conservar el archivo PDF localmente en la carpeta Facturas
+        pass
             
     return True, "Factura generada y enviada correctamente"
+
+def generar_pdf_pedido(datos_pedido, ruta_pdf):
+    try:
+        c = canvas.Canvas(ruta_pdf, pagesize=letter)
+        ancho, alto = letter
+        
+        c.setFont("Helvetica-Bold", 24)
+        c.setFillColor(colors.HexColor("#003B73"))
+        c.drawString(50, alto - 50, "FARMACIA CUCEI")
+        
+        c.setFont("Helvetica", 12)
+        c.setFillColor(colors.black)
+        c.drawString(50, alto - 80, "Solicitud de Abastecimiento / Pedido")
+        c.drawString(50, alto - 100, f"Fecha de Pedido: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        c.drawString(50, alto - 120, f"Proveedor: {datos_pedido.get('nombre_proveedor', 'N/A')}")
+        
+        c.setStrokeColor(colors.HexColor("#00A4E4"))
+        c.setLineWidth(2)
+        c.line(50, alto - 140, ancho - 50, alto - 140)
+        
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(50, alto - 170, "CANT")
+        c.drawString(100, alto - 170, "DESCRIPCIÓN")
+        c.drawString(350, alto - 170, "COSTO. UNIT")
+        c.drawString(450, alto - 170, "SUBTOTAL")
+        
+        c.setStrokeColor(colors.lightgrey)
+        c.setLineWidth(1)
+        c.line(50, alto - 180, ancho - 50, alto - 180)
+        
+        c.setFont("Helvetica", 12)
+        y = alto - 200
+        for item in datos_pedido.get('items', []):
+            # item = (id_prod, nombre, cant, subtot)
+            cant = item[2]
+            nombre = item[1]
+            subtot = item[3]
+            precio_unit = subtot / cant if cant > 0 else 0
+            
+            c.drawString(50, y, str(cant))
+            c.drawString(100, y, str(nombre)[:35])
+            c.drawString(350, y, f"${float(precio_unit):.2f}")
+            c.drawString(450, y, f"${float(subtot):.2f}")
+            y -= 25
+            if y < 100:
+                c.showPage()
+                c.setFont("Helvetica", 12)
+                y = alto - 50
+                
+        y -= 20
+        c.setStrokeColor(colors.HexColor("#00A4E4"))
+        c.setLineWidth(2)
+        c.line(50, y, ancho - 50, y)
+        y -= 30
+        
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(300, y, "TOTAL COMPRA:")
+        c.setFillColor(colors.HexColor("#28A745"))
+        c.drawString(450, y, f"${datos_pedido.get('total', 0.0):.2f}")
+        
+        c.setFont("Helvetica-Oblique", 10)
+        c.setFillColor(colors.gray)
+        c.drawString(50, 50, "Documento generado automáticamente por el Sistema Farmacia CUCEI.")
+        
+        c.save()
+        return True
+    except Exception as e:
+        print(f"[ERROR] Al generar PDF de pedido: {e}")
+        return False
+
+def generar_y_enviar_pedido_proveedor(datos_pedido, correo_proveedor):
+    if not correo_proveedor:
+        return False, "Sin correo"
+        
+    try:
+        import reportlab
+    except ImportError:
+        return False, "Falta la librería reportlab"
+        
+    if not os.path.exists("Reportes"):
+        os.makedirs("Reportes")
+        
+    fecha_str = datetime.now().strftime('%Y%m%d%H%M%S')
+    nombre_pdf = f"Pedido_CUCEI_{fecha_str}.pdf"
+    ruta_pdf = os.path.join("Reportes", nombre_pdf)
+    
+    if not generar_pdf_pedido(datos_pedido, ruta_pdf):
+        return False, "Error al generar el documento PDF"
+        
+    msg = EmailMessage()
+    msg['Subject'] = "Solicitud de Abastecimiento - Farmacia CUCEI"
+    msg['From'] = EMAIL_REMITENTE
+    msg['To'] = correo_proveedor
+    
+    cuerpo = f"""
+    Estimado proveedor {datos_pedido.get('nombre_proveedor', '')},
+    
+    Por medio del presente correo le hacemos llegar nuestra solicitud de abastecimiento para 
+    la sucursal de Farmacia CUCEI.
+    
+    Adjunto a este correo encontrará el detalle de los productos requeridos, cantidades
+    y montos acordados.
+    
+    Quedamos a la espera de su confirmación y envío de la mercancía.
+    
+    Atentamente,
+    Equipo Farmacia CUCEI.
+    """
+    msg.set_content(cuerpo)
+    
+    try:
+        with open(ruta_pdf, 'rb') as f:
+            pdf_data = f.read()
+        msg.add_attachment(pdf_data, maintype='application', subtype='pdf', filename=nombre_pdf)
+        
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
+            smtp.login(EMAIL_REMITENTE, PASSWORD_APP)
+            smtp.send_message(msg)
+            
+    except Exception as e:
+        return False, f"Fallo al enviar correo al proveedor: {e}"
+    finally:
+        # Conservar el archivo PDF localmente en la carpeta Reportes
+        pass
+            
+    return True, "Pedido enviado al proveedor"
+
+def generar_reporte_turno(datos_turno):
+    try:
+        import reportlab
+    except ImportError:
+        return False, "Falta la librería reportlab"
+        
+    # Crear carpeta si no existe
+    if not os.path.exists("Reportes"):
+        os.makedirs("Reportes")
+        
+    fecha_actual = datetime.now()
+    nombre_archivo = f"REP_{fecha_actual.strftime('%d_%m_%Y')}_SUC_1.pdf"
+    ruta_pdf = os.path.join("Reportes", nombre_archivo)
+    
+    try:
+        c = canvas.Canvas(ruta_pdf, pagesize=letter)
+        ancho, alto = letter
+        
+        c.setFont("Helvetica-Bold", 24)
+        c.setFillColor(colors.HexColor("#003B73"))
+        c.drawString(50, alto - 50, "REPORTE DE TURNO - FARMACIA CUCEI")
+        
+        c.setFont("Helvetica", 12)
+        c.setFillColor(colors.black)
+        c.drawString(50, alto - 80, f"Fecha/Hora Inicio: {datos_turno.get('inicio').strftime('%Y-%m-%d %H:%M:%S')}")
+        c.drawString(50, alto - 100, f"Fecha/Hora Fin: {datos_turno.get('fin').strftime('%Y-%m-%d %H:%M:%S')}")
+        c.drawString(50, alto - 120, "Sucursal: 1")
+        
+        c.setStrokeColor(colors.HexColor("#00A4E4"))
+        c.setLineWidth(2)
+        c.line(50, alto - 140, ancho - 50, alto - 140)
+        
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(50, alto - 170, "RESUMEN OPERATIVO")
+        
+        c.setFont("Helvetica", 12)
+        c.drawString(50, alto - 200, f"Total Ventas (Ingresos): ${datos_turno.get('ventas', 0.0):.2f}")
+        c.drawString(50, alto - 220, f"Total Compras (Egresos Abastecimiento): ${datos_turno.get('compras', 0.0):.2f}")
+        c.drawString(50, alto - 240, f"Producto Más Vendido: {datos_turno.get('top_prod', 'N/A')}")
+        
+        # Balance
+        balance = datos_turno.get('ventas', 0.0) - datos_turno.get('compras', 0.0)
+        color_balance = colors.HexColor("#28A745") if balance >= 0 else colors.HexColor("#d9534f")
+        
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(50, alto - 280, "BALANCE DEL TURNO:")
+        c.setFillColor(color_balance)
+        c.drawString(220, alto - 280, f"${balance:.2f}")
+        
+        c.setFont("Helvetica-Oblique", 10)
+        c.setFillColor(colors.gray)
+        c.drawString(50, 50, "Reporte generado automáticamente por el Sistema Farmacia CUCEI.")
+        
+        c.save()
+        return True, ruta_pdf
+    except Exception as e:
+        return False, f"Error generando PDF de turno: {e}"
+
+def generar_reporte_proveedor_eliminado(nombre_prov, productos):
+    from reportlab.lib.pagesizes import letter
+    from reportlab.pdfgen import canvas
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet
+    import os
+    
+    styles = getSampleStyleSheet()
+    
+    if not os.path.exists("Reportes"):
+        os.makedirs("Reportes")
+        
+    fecha_actual = datetime.now()
+    nombre_pdf = f"ELIMINADO_{nombre_prov}_{fecha_actual.strftime('%d_%m_%Y')}.pdf"
+    ruta_pdf = os.path.join("Reportes", nombre_pdf)
+    
+    doc = SimpleDocTemplate(ruta_pdf, pagesize=letter)
+    elementos = []
+    
+    estilo_titulo = styles["Title"].clone('TituloEliminado')
+    estilo_titulo.textColor = colors.red
+    estilo_titulo.fontSize = 20
+    
+    estilo_normal = styles["Normal"]
+    
+    elementos.append(Paragraph("REPORTE DE ELIMINACIÓN DE PROVEEDOR", estilo_titulo))
+    elementos.append(Spacer(1, 20))
+    elementos.append(Paragraph(f"<b>Proveedor Eliminado:</b> {nombre_prov}", estilo_normal))
+    elementos.append(Paragraph(f"<b>Fecha de Baja:</b> {fecha_actual.strftime('%d/%m/%Y %H:%M:%S')}", estilo_normal))
+    elementos.append(Spacer(1, 20))
+    
+    elementos.append(Paragraph("<font color='red'><b>PROVEEDOR ELIMINADO FORZOSAMENTE</b></font>", estilo_titulo))
+    elementos.append(Spacer(1, 20))
+    
+    if productos:
+        elementos.append(Paragraph("<b>Productos que vendió (ahora sin proveedor):</b>", estilo_normal))
+        elementos.append(Spacer(1, 10))
+        for p in productos:
+            elementos.append(Paragraph(f"- {p}", estilo_normal))
+    else:
+        elementos.append(Paragraph("Este proveedor no tenía productos asociados.", estilo_normal))
+        
+    try:
+        doc.build(elementos)
+    except Exception as e:
+        print("Error al generar PDF de proveedor eliminado:", e)
+        return False, "Error"
+        
+    return True, "Reporte generado"
+
+def generar_reporte_producto_eliminado(nombre_prod, nombre_prov):
+    from reportlab.lib.pagesizes import letter
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+    from reportlab.lib import colors
+    from reportlab.lib.styles import getSampleStyleSheet
+    import os
+    import re
+    
+    styles = getSampleStyleSheet()
+    
+    if not os.path.exists("Reportes"):
+        os.makedirs("Reportes")
+        
+    fecha_actual = datetime.now()
+    nombre_seguro = re.sub(r'[\\/*?:"<>|]', "", nombre_prod)
+    nombre_pdf = f"PROD_ELIMINADO_{nombre_seguro}_{fecha_actual.strftime('%d_%m_%Y')}.pdf"
+    ruta_pdf = os.path.join("Reportes", nombre_pdf)
+    
+    doc = SimpleDocTemplate(ruta_pdf, pagesize=letter)
+    elementos = []
+    
+    estilo_titulo = styles["Title"].clone('TituloEliminadoProd')
+    estilo_titulo.textColor = colors.red
+    estilo_titulo.fontSize = 20
+    
+    estilo_normal = styles["Normal"]
+    
+    elementos.append(Paragraph("REPORTE DE ELIMINACIÓN DE PRODUCTO", estilo_titulo))
+    elementos.append(Spacer(1, 20))
+    elementos.append(Paragraph(f"<b>Producto Eliminado:</b> {nombre_prod}", estilo_normal))
+    elementos.append(Paragraph(f"<b>Proveedor Asociado:</b> {nombre_prov if nombre_prov else 'Ninguno'}", estilo_normal))
+    elementos.append(Paragraph(f"<b>Fecha de Baja:</b> {fecha_actual.strftime('%d/%m/%Y %H:%M:%S')}", estilo_normal))
+    elementos.append(Spacer(1, 20))
+    
+    elementos.append(Paragraph("<font color='red'><b>PRODUCTO ELIMINADO FORZOSAMENTE</b></font>", estilo_titulo))
+    elementos.append(Spacer(1, 20))
+    elementos.append(Paragraph("Este producto tenía historial de ventas o compras. Los registros históricos se mantienen por contabilidad, pero han sido desvinculados de este producto.", estilo_normal))
+        
+    try:
+        doc.build(elementos)
+    except Exception as e:
+        print("Error al generar PDF de producto eliminado:", e)
+        return False, "Error"
+        
+    return True, "Reporte generado"
 
 # --- MENÚ DE PRUEBAS ---
 if __name__ == "__main__":

@@ -145,7 +145,13 @@ class PantallaVentas(ctk.CTkFrame):
             
         self.etiqueta_subtotal.configure(text=f"Subtotal: ${subtotal:.2f}")
         
-        descuento = float(self.etiqueta_descuento.cget("text").split("$")[1]) if "$" in self.etiqueta_descuento.cget("text") else 0.0
+        desc_text = self.etiqueta_descuento.cget("text")
+        if "10%" in desc_text:
+            descuento = subtotal * 0.10
+            self.etiqueta_descuento.configure(text=f"Descuento (Puntos): 10% (${descuento:.2f})")
+        else:
+            descuento = 0.0
+            
         total = subtotal - descuento
         if total < 0: total = 0.0
         
@@ -209,10 +215,11 @@ class PantallaVentas(ctk.CTkFrame):
         puntos = db_manager.obtener_puntos_cliente(telefono)
         if puntos is not None:
             if puntos >= 50:
-                self.etiqueta_puntos_actuales.configure(text=f"PUNTOS: {puntos}\n¡Aplica $50 de descuento!")
-                self.etiqueta_descuento.configure(text="Descuento (Puntos): $50.00")
+                self.etiqueta_puntos_actuales.configure(text=f"PUNTOS: {puntos}\n¡Aplica 10% de descuento!")
+                self.etiqueta_descuento.configure(text="Descuento (Puntos): 10%")
             else:
-                self.etiqueta_puntos_actuales.configure(text=f"PUNTOS: {puntos}\nNo alcanza descuento.")
+                faltan = 50 - puntos
+                self.etiqueta_puntos_actuales.configure(text=f"PUNTOS: {puntos}\nFaltan {faltan} pts para el 10%.")
                 self.etiqueta_descuento.configure(text="Descuento (Puntos): $0.00")
         else:
             self.etiqueta_puntos_actuales.configure(text="Cliente no encontrado.")
@@ -241,9 +248,15 @@ class PantallaVentas(ctk.CTkFrame):
             telefono = None 
             
         total = float(self.etiqueta_total_final.cget("text").split("$")[1])
+        subtotal = float(self.etiqueta_subtotal.cget("text").split("$")[1])
         desc_text = self.etiqueta_descuento.cget("text")
-        descuento_usado = "50" in desc_text
-        puntos_generados = int(total * 0.10)
+        descuento_usado = "10%" in desc_text
+        
+        if descuento_usado:
+            puntos_generados = 0
+        else:
+            puntos_generados = 10 if subtotal > 500 else 0
+            
         id_usuario = 1 # Para simplificar la demostración, usamos el ID 1 por defecto
         
         exito, msg = db_manager.registrar_venta(id_usuario, telefono, total, descuento_usado, puntos_generados, items)
