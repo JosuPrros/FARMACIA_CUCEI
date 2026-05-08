@@ -156,6 +156,17 @@ class PantallaClientes(ctk.CTkFrame):
         )
         self.entrada_buscar.pack(side="right", padx=(10,0))
         
+        self.boton_eliminar_cliente = ctk.CTkButton(
+            self.marco_busqueda,
+            text="Eliminar Seleccionado",
+            font=("Helvetica", 12, "bold"),
+            fg_color="#D9534F",
+            hover_color="#C9302C",
+            width=150, height=35, corner_radius=8,
+            command=self.evento_eliminar_cliente
+        )
+        self.boton_eliminar_cliente.pack(side="right", padx=(10, 10))
+        
         # Tabla de datos usando ttk.Treeview dado que ctk no tiene tabla nativa, pero se puede estilizar
         estilo = ttk.Style()
         estilo.theme_use("default")
@@ -225,6 +236,25 @@ class PantallaClientes(ctk.CTkFrame):
         self.combo_mes.set("Mes")
         self.combo_anio.set("Año")
         print("[INFO] Formulario de clientes limpiado.")
+
+    def evento_eliminar_cliente(self):
+        seleccion = self.tabla_clientes.selection()
+        if not seleccion:
+            messagebox.showwarning("Selección Requerida", "Por favor, selecciona un cliente de la tabla para eliminar.")
+            return
+            
+        item = self.tabla_clientes.item(seleccion[0])
+        telefono = item['values'][0] # Teléfono is the first column
+        nombre = item['values'][2] # Nombre is the third column
+        
+        confirmacion = messagebox.askyesno("Confirmar Eliminación", f"¿Estás seguro de que deseas eliminar al cliente {nombre} (Tel: {telefono})?")
+        if confirmacion:
+            exito, msg = db_manager.eliminar_cliente(str(telefono))
+            if exito:
+                messagebox.showinfo("Éxito", msg)
+                self.cargar_datos()
+            else:
+                messagebox.showerror("Error", msg)
 
 # --- Ejecución Independiente ---
 if __name__ == "__main__":

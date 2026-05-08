@@ -149,6 +149,21 @@ def obtener_clientes():
     conn.close()
     return rows
 
+def eliminar_cliente(telefono):
+    conn = get_connection()
+    if not conn: return False, "Sin conexión a Base de Datos"
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM Clientes WHERE telefono = %s", (telefono,))
+        conn.commit()
+        return True, "Cliente eliminado exitosamente"
+    except Error as e:
+        if "foreign key constraint" in str(e).lower():
+            return False, "No se puede eliminar el cliente porque tiene ventas asociadas."
+        return False, f"Error en BD: {str(e)}"
+    finally:
+        if conn: conn.close()
+
 def obtener_puntos_cliente(telefono):
     conn = get_connection()
     if not conn: return None
