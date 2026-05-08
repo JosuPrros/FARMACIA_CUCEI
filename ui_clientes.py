@@ -13,8 +13,9 @@ COLOR_BLANCO = "#FFFFFF"
 ctk.set_appearance_mode("Light")
 
 class PantallaClientes(ctk.CTkFrame):
-    def __init__(self, master=None, **kwargs):
+    def __init__(self, master=None, rol="Admin", **kwargs):
         super().__init__(master, **kwargs)
+        self.rol = rol
         
         # --- Configuración Básica del Marco ---
         self.configure(fg_color=COLOR_FONDO)
@@ -115,7 +116,8 @@ class PantallaClientes(ctk.CTkFrame):
             corner_radius=15, 
             command=self.evento_guardar_cliente
         )
-        self.boton_guardar_cliente.pack(pady=(40, 20), padx=30, fill="x")
+        if self.rol in ["Admin", "Gerente"]:
+            self.boton_guardar_cliente.pack(pady=(40, 20), padx=30, fill="x")
         
         # Botón para Limpiar (Estilo secundario)
         self.boton_limpiar = ctk.CTkButton(
@@ -165,7 +167,8 @@ class PantallaClientes(ctk.CTkFrame):
             width=150, height=35, corner_radius=8,
             command=self.evento_eliminar_cliente
         )
-        self.boton_eliminar_cliente.pack(side="right", padx=(10, 10))
+        if self.rol in ["Admin", "Gerente"]:
+            self.boton_eliminar_cliente.pack(side="right", padx=(10, 10))
         
         # Tabla de datos usando ttk.Treeview dado que ctk no tiene tabla nativa, pero se puede estilizar
         estilo = ttk.Style()

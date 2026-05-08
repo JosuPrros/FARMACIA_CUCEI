@@ -86,8 +86,9 @@ class VentanaEditarProducto(ctk.CTkToplevel):
             messagebox.showerror("Error", msg)
 
 class PantallaProductos(ctk.CTkFrame):
-    def __init__(self, master=None, **kwargs):
+    def __init__(self, master=None, rol="Admin", **kwargs):
         super().__init__(master, **kwargs)
+        self.rol = rol
         
         self.configure(fg_color=COLOR_FONDO)
         
@@ -125,7 +126,6 @@ class PantallaProductos(ctk.CTkFrame):
             font=("Helvetica", 13, "bold"), corner_radius=10,
             command=self.evento_nuevo_producto
         )
-        self.boton_nuevo_producto.pack(side="right", padx=(10, 0), pady=20)
         
         # Botón Editar Producto
         self.boton_editar_producto = ctk.CTkButton(
@@ -134,7 +134,6 @@ class PantallaProductos(ctk.CTkFrame):
             font=("Helvetica", 13, "bold"), corner_radius=10,
             command=self.evento_editar_producto
         )
-        self.boton_editar_producto.pack(side="right", padx=(10, 0), pady=20)
 
         # Botón Dar de baja Producto
         self.boton_eliminar_producto = ctk.CTkButton(
@@ -143,7 +142,11 @@ class PantallaProductos(ctk.CTkFrame):
             font=("Helvetica", 13, "bold"), corner_radius=10,
             command=self.evento_eliminar_producto
         )
-        self.boton_eliminar_producto.pack(side="right", padx=(20, 0), pady=20)
+
+        if self.rol in ["Admin", "Gerente"]:
+            self.boton_eliminar_producto.pack(side="right", padx=(20, 0), pady=20)
+            self.boton_editar_producto.pack(side="right", padx=(10, 0), pady=20)
+            self.boton_nuevo_producto.pack(side="right", padx=(10, 0), pady=20)
         
     def configurar_tabla(self):
         """Dibuja un frame con una tabla (Treeview) para mostrar todo el stock de forma ordenada"""

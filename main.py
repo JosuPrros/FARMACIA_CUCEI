@@ -123,12 +123,12 @@ class PantallaPrincipal(ctk.CTk):
         
     def abrir_productos(self):
         self.limpiar_area_central()
-        self.frame_actual = PantallaProductos(self.area_central)
+        self.frame_actual = PantallaProductos(self.area_central, rol=self.rol_usuario)
         self.frame_actual.pack(fill="both", expand=True)
         
     def abrir_clientes(self):
         self.limpiar_area_central()
-        self.frame_actual = PantallaClientes(self.area_central)
+        self.frame_actual = PantallaClientes(self.area_central, rol=self.rol_usuario)
         self.frame_actual.pack(fill="both", expand=True)
         
     def abrir_compras(self):
